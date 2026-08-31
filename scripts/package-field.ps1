@@ -84,7 +84,7 @@ try {
     $true
   )
   $archiveHash = Get-Sha256 $archivePath
-  Set-Content -LiteralPath "$archivePath.sha256.txt" -Value "$archiveHash  $(Split-Path -Leaf $archivePath)" -Encoding ascii
+  Set-Content -LiteralPath "$archivePath.sha256.txt" -Value $archiveHash -Encoding ascii
 
   Write-Host ""
   Write-Host "发行包已生成：" -ForegroundColor Green
