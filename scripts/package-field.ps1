@@ -19,6 +19,20 @@ function Invoke-Checked([string]$Command, [string[]]$Arguments) {
   if ($LASTEXITCODE -ne 0) { throw "$Command $($Arguments -join ' ') 执行失败。" }
 }
 
+function Get-Sha256([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      return (($algorithm.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") }) -join "").ToUpperInvariant()
+    } finally {
+      $algorithm.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+}
+
 Push-Location $root
 try {
   if (-not $SkipChecks) {
@@ -68,7 +82,7 @@ try {
   } else {
     Compress-Archive -LiteralPath $releaseRoot -DestinationPath $archivePath -CompressionLevel Optimal
   }
-  $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+  $archiveHash = Get-Sha256 $archivePath
   Set-Content -LiteralPath "$archivePath.sha256.txt" -Value "$archiveHash  $(Split-Path -Leaf $archivePath)" -Encoding ascii
 
   Write-Host ""

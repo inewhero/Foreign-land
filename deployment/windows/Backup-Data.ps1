@@ -8,6 +8,20 @@ $pidFile = Join-Path $root ".run\server.pid"
 $database = Join-Path $root "data\experiment.sqlite"
 $backupDirectory = Join-Path $root "backups"
 
+function Get-Sha256([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      return (($algorithm.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") }) -join "").ToUpperInvariant()
+    } finally {
+      $algorithm.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+}
+
 if (Test-Path -LiteralPath $pidFile) {
   $serverPid = [int](Get-Content -LiteralPath $pidFile -Raw)
   if (Get-Process -Id $serverPid -ErrorAction SilentlyContinue) {
@@ -29,7 +43,7 @@ foreach ($file in $databaseFiles) {
   Copy-Item -LiteralPath $file.FullName -Destination $destinationDirectory
 }
 $hashLines = Get-ChildItem -LiteralPath $destinationDirectory -File | ForEach-Object {
-  "{0}  {1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash, $_.Name
+  "{0}  {1}" -f (Get-Sha256 $_.FullName), $_.Name
 }
 Set-Content -LiteralPath (Join-Path $destinationDirectory "SHA256.txt") -Value $hashLines -Encoding ascii
 Write-Host "数据已备份到：$destinationDirectory" -ForegroundColor Green
