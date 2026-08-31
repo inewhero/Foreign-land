@@ -1,12 +1,13 @@
 ﻿[CmdletBinding()]
 param(
-  [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) "releases"),
+  [string]$OutputDirectory,
   [switch]$SkipChecks
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $root = Split-Path -Parent $PSScriptRoot
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root "releases" }
 $package = Get-Content -LiteralPath (Join-Path $root "package.json") -Raw | ConvertFrom-Json
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $releaseName = "异域同行-Windows-x64-v$($package.version)-$timestamp"
