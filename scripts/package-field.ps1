@@ -76,12 +76,13 @@ try {
   $buildInfo | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $releaseRoot "发行信息.json") -Encoding utf8
 
   Write-Host "[5/5] 创建压缩包并计算校验值..." -ForegroundColor Cyan
-  $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
-  if ($tar) {
-    Invoke-Checked $tar.Source @("-a", "-c", "-f", $archivePath, "-C", $OutputDirectory, $releaseName)
-  } else {
-    Compress-Archive -LiteralPath $releaseRoot -DestinationPath $archivePath -CompressionLevel Optimal
-  }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $releaseRoot,
+    $archivePath,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $true
+  )
   $archiveHash = Get-Sha256 $archivePath
   Set-Content -LiteralPath "$archivePath.sha256.txt" -Value "$archiveHash  $(Split-Path -Leaf $archivePath)" -Encoding ascii
 
