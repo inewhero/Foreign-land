@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) "releases"),
   [switch]$SkipChecks
