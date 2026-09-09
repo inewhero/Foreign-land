@@ -1,0 +1,84 @@
+name: LAN Windows release
+
+on:
+  push:
+    tags:
+      - 'lan-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lan-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify LAN release source
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^lan-v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw 'Use a LAN version tag such as lan-v0.1.0.'
+          }
+          git fetch origin '+refs/heads/lan:refs/remotes/origin/lan' '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify lan and main branch tips.' }
+          $tagCommit = (git rev-parse HEAD).Trim()
+          $lanCommit = (git rev-parse refs/remotes/origin/lan).Trim()
+          $mainCommit = (git rev-parse refs/remotes/origin/main).Trim()
+          if ($tagCommit -ne $lanCommit) { throw 'Release tag must point to the current lan branch tip.' }
+          if ($tagCommit -eq $mainCommit) { throw 'LAN release must not point to the main branch tip.' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:RELEASE_TAG -ne "lan-v$version") { throw 'Tag version must match package.json.' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: x64
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Validate experiment sequences
+        run: npm run sequence:validate
+      - name: Build and package standalone Windows runtime
+        run: ./scripts/package-field.ps1 -SkipChecks -OutputDirectory "$env:RUNNER_TEMP/lan-release"
+      - name: Verify release assets
+        run: |
+          $archives = @(Get-ChildItem "$env:RUNNER_TEMP/lan-release" -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) { throw 'Expected exactly one release archive.' }
+          $archive = $archives[0]
+          $checksum = "$($archive.FullName).sha256.txt"
+          $expected = (Get-Content -LiteralPath $checksum -Raw).Trim()
+          if ((Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash -ne $expected) {
+            throw 'Archive SHA256 verification failed.'
+          }
+      - name: Preserve build assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: lan-windows-x64
+          path: |
+            ${{ runner.temp }}/lan-release/*.zip
+            ${{ runner.temp }}/lan-release/*.sha256.txt
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $assets = @(Get-ChildItem "$env:RUNNER_TEMP/lan-release" -File | Where-Object { $_.Name -match '\.(zip|sha256\.txt)$' } | ForEach-Object FullName)
+          gh release create $env:RELEASE_TAG @assets --verify-tag --title "局域网 Windows x64 $env:RELEASE_TAG" --notes "下载 ZIP 后完整解压，双击 启动实验.cmd。内含 Node.js 24，无需安装开发环境。被试设备须与主试电脑在同一局域网。SHA256 校验文件随包提供。" --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publication failed.' }
